@@ -1,4 +1,4 @@
-name: cicd-3
+name: cicd-4
 on:
   push:
     paths:
@@ -44,7 +44,7 @@ jobs:
     outputs:
       environment: ${{ steps.set-env.outputs.environment }}
     steps:
-      - name: set-env
+      - name: set env
         id: set-env
         run: |
           if [[ ${{ github.ref_type }} == "tag" ]]; then
@@ -55,7 +55,7 @@ jobs:
           if [[ ${{ github.ref_type }} == "branch" ]]; then
             echo "environment=dev" >> $GITHUB_OUTPUT
             if [[ ${{ github.base_ref }} == "master" ]]; then
-              echo "environment=prod" >> $GITHUB_OUTPUT
+              echo "environment=staging" >> $GITHUB_OUTPUT
             fi
           fi
       - name: check env
@@ -140,7 +140,7 @@ jobs:
     #               "type": "section",
     #               "text": {
     #                 "type": "mrkdwn",
-    #                 "text": "Environment : ${{ matrix.environment }}, Deploy Result: ${{ steps.status.outcome }}, Repository : ${{ github.repository }}."
+    #                 "text": "Environment : ${{ matrix.environment }}, Deploy Result : ${{ steps.status.outcome }}, Repository : ${{ github.repository }}."
     #               }
     #             }
     #           ]
@@ -163,3 +163,69 @@ jobs:
       - name: create pr
         run: |
           gh pr create --base master --head release/${{ github.ref_name }} --title "release/${{ github.ref_name }} -> master" --body "release pr"
+
+  approve:
+    if: needs.set-environment.outputs.environment == 'staging'
+    runs-on: ubuntu-latest
+    environment: approve-process
+    needs: [set-environment, deploy]
+    steps:
+      - name: approve
+        run: |
+          echo "Approve Done"
+
+  prod-deploy:
+    runs-on: ubuntu-latest
+    needs: [approve]
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      matrix:
+        environment: ["prod"]
+    environment: ${{ matrix.environment }}
+    steps:
+      - name: checkout the code
+        uses: actions/checkout@v4
+    #   - name: Configure AWS Credentials
+    #     id: credentials
+    #     uses: aws-actions/configure-aws-credentials@v4
+    #     with:
+    #       aws-region: ${{ vars.AWS_REGION }}
+    #       role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+    #   - name: setup kubectl
+    #     uses: azure/setup-kubectl@v3
+    #     with:
+    #       version: latest
+    #   - name: setup helm
+    #     uses: azure/setup-helm@v3
+    #     with:
+    #       version: v3.11.1
+    #   - name: access kubernetes
+    #     run: |
+    #       aws eks update-kubeconfig --name ${{ vars.CLUSTER_NAME }}
+    #   - name: deploy
+    #     id: status
+    #     run: |
+    #       helm upgrade --install my-app kubernetes/my-app --create-namespace --namespace my-app-${{ vars.SUFFIX }} \
+    #       --set image.tag=${{ github.sha }} \
+    #       --set image.repository=${{ secrets.REGISTRY }}/${{ vars.REPOSITORY }}
+    #   - name: notify
+    #     if: always()
+    #     uses: slackapi/slack-github-action@v4.0.0
+    #     with:
+    #       webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+    #       webhook-type: incoming-webhook
+    #       payload: |
+    #         {
+    #           "text": "message",
+    #           "blocks": [
+    #             {
+    #               "type": "section",
+    #               "text": {
+    #                 "type": "mrkdwn",
+    #                 "text": "Environment : ${{ matrix.environment }}, Deploy Result : ${{ steps.status.outcome }}, Repository : ${{ github.repository }}."
+    #               }
+    #             }
+    #           ]
+    #         }
